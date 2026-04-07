@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pandas as pd
 from scipy.sparse import load_npz
@@ -10,7 +12,7 @@ import pickle
 # 1. LOAD ARTIFACTS
 # ─────────────────────────────────────────────────────────────
 
-def load_artifacts(processed_dir: str, user_id: int):
+def load_artifacts(processed_dir: str):
     """
     Load every artifact produced by the previous three steps.
     Raises a clear FileNotFoundError if anything is missing.
@@ -19,7 +21,6 @@ def load_artifacts(processed_dir: str, user_id: int):
         "movie_matrix":  os.path.join(processed_dir, "movie_vectors.npz"),
         "movie_index":   os.path.join(processed_dir, "movie_index.csv"),
         "vectorizer":    os.path.join(processed_dir, "vectorizer.pkl"),
-        "user_vector":   os.path.join(processed_dir, f"user_vector_{user_id}.npy"),
     }
 
     print(f"\nLooking for artifacts in: {processed_dir}")
@@ -36,16 +37,14 @@ def load_artifacts(processed_dir: str, user_id: int):
 
     movie_matrix = load_npz(paths["movie_matrix"])
     movie_index  = pd.read_csv(paths["movie_index"])
-    user_vector  = np.load(paths["user_vector"])
 
     with open(paths["vectorizer"], "rb") as f:
         vectorizer = pickle.load(f)
 
     print(f"\nMovie matrix shape : {movie_matrix.shape}")
-    print(f"User vector shape  : {user_vector.shape}")
     print(f"Movie index rows   : {len(movie_index)}")
 
-    return movie_matrix, movie_index, vectorizer, user_vector
+    return movie_matrix, movie_index, vectorizer
 
 
 # ─────────────────────────────────────────────────────────────
@@ -153,7 +152,7 @@ def print_recommendations(recommendations: pd.DataFrame, user_id: int):
 # 6. MAIN
 # ─────────────────────────────────────────────────────────────
 
-def main(user_id: int = 1, top_n: int = 10, exclude_seen: bool = True):
+def main(user_id: int = 4, top_n: int = 10, exclude_seen: bool = True):
     print("=" * 60)
     print(" COMPARISON FOR RECOMMENDATION ")
     print("=" * 60)
@@ -162,7 +161,10 @@ def main(user_id: int = 1, top_n: int = 10, exclude_seen: bool = True):
     project_root = os.path.dirname(base_dir)
 
     processed_dir = os.path.join(project_root, "data", "processed")
-    ratings_path  = os.path.join(project_root, "data", "raw", "ratings.csv")
+    ratings_path  = os.path.join(project_root, "data", "cleaned", "ratings_cleaned.csv")
+    user_matrix = np.load(f"{processed_dir}/user_matrix.npy")
+    with open(f"{processed_dir}/user_id_to_row.json") as f:
+        user_id_to_row = json.load(f)
 
     print(f"\nProject root  : {project_root}")
     print(f"Processed dir : {processed_dir}")
@@ -171,9 +173,12 @@ def main(user_id: int = 1, top_n: int = 10, exclude_seen: bool = True):
     print(f"Exclude seen  : {exclude_seen}")
 
     # Step 1 – Load everything produced by the previous three steps
-    movie_matrix, movie_index, vectorizer, user_vector = load_artifacts(
-        processed_dir, user_id
+    movie_matrix, movie_index, vectorizer = load_artifacts(
+        processed_dir
     )
+
+    # Get user vector
+    user_vector = user_matrix[user_id_to_row[str(user_id)]]
 
     # Step 2 – Compute cosine similarity: user_vector vs all movie vectors
     scores = compute_similarity(user_vector, movie_matrix)
@@ -191,9 +196,6 @@ def main(user_id: int = 1, top_n: int = 10, exclude_seen: bool = True):
     # Step 4 – Display
     print_recommendations(recommendations, user_id)
 
-    # Step 5 – Save
-    save_recommendations(recommendations, processed_dir, user_id)
-
     print("\n Recommendation step complete!")
 
     return recommendations
@@ -207,7 +209,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Generate movie recommendations for a user.")
-    parser.add_argument("--user_id",      type=int,   default=1,     help="userId from ratings.csv")
+    parser.add_argument("--user_id",      type=int,   default=3,     help="userId from ratings.csv")
     parser.add_argument("--top_n",        type=int,   default=10,    help="Number of recommendations")
     parser.add_argument("--include_seen", action="store_true",       help="Include already-seen movies")
 

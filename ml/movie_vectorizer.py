@@ -17,6 +17,7 @@ def load_featured_movies(processed_dir: str) -> pd.DataFrame:
             f"Featured dataset not found at: {path}\n"
             "Please run feature_engineering.py (Leab's task) first."
         )
+    
     df = pd.read_csv(path)
     print(f"Loaded {len(df)} movies from featured dataset.")
     return df

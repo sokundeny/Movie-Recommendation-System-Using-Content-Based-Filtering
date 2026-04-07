@@ -1,28 +1,23 @@
+import json
+import os
 import numpy as np
 import pandas as pd
 from scipy.sparse import load_npz
-import os
 import pickle
-
 
 # ─────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────
 
 def load_artifacts(processed_dir: str):
-    """Load movie matrix, movie index, and vectorizer produced by Methy's step."""
+    """Load movie matrix, movie index, and vectorizer."""
     matrix_path     = os.path.join(processed_dir, "movie_vectors.npz")
     index_path      = os.path.join(processed_dir, "movie_index.csv")
     vectorizer_path = os.path.join(processed_dir, "vectorizer.pkl")
 
-    print(f"\nLooking for artifacts in: {processed_dir}")
-
     for p in [matrix_path, index_path, vectorizer_path]:
         if not os.path.exists(p):
-            raise FileNotFoundError(
-                f"Missing artifact: {p}\n"
-                "Please run feature_engineering.py (Leab) and movie_vectorizer.py (Methy) first."
-            )
+            raise FileNotFoundError(f"Missing artifact: {p}")
 
     movie_matrix = load_npz(matrix_path)
     movie_index  = pd.read_csv(index_path)
@@ -32,137 +27,63 @@ def load_artifacts(processed_dir: str):
 
     print(f"Loaded movie matrix  : {movie_matrix.shape}")
     print(f"Loaded movie index   : {len(movie_index)} titles")
-
     return movie_matrix, movie_index, vectorizer
 
-
-def get_liked_movies(
-    ratings_path: str,
-    user_id: int,
-    rating_threshold: float = 4.0,
-) -> list[int]:
-
-    print(f"\nLooking for ratings at: {ratings_path}")
-
-    if os.path.exists(ratings_path):
-        ratings = pd.read_csv(ratings_path)
-        liked = ratings[
-            (ratings["userId"] == user_id) &
-            (ratings["rating"] >= rating_threshold)
-        ]["movieId"].tolist()
-
-        print(f"User {user_id}: found {len(liked)} liked movies (rating >= {rating_threshold})")
-        return liked
-    else:
-        demo_ids = [1, 2, 3, 10, 32]
-        print(f"[Demo mode] ratings.csv not found — using demo movie IDs: {demo_ids}")
-        return demo_ids
-
-
-def build_user_vector(
-    liked_movie_ids: list[int],
-    movie_matrix,
-    movie_index: pd.DataFrame,
-) -> np.ndarray:
-
+def build_user_vector(liked_movie_ids, movie_matrix, movie_index):
+    """Compute a single user's vector as the mean of liked movie vectors."""
     id_to_row = dict(zip(movie_index["movieId"], movie_index["vector_row"]))
-
-    matched_rows = []
-    skipped = []
-
-    for mid in liked_movie_ids:
-        if mid in id_to_row:
-            matched_rows.append(id_to_row[mid])
-        else:
-            skipped.append(mid)
-
-    if skipped:
-        print(f"⚠ Skipped {len(skipped)} movies not found in index: {skipped[:5]}")
+    matched_rows = [id_to_row[mid] for mid in liked_movie_ids if mid in id_to_row]
 
     if not matched_rows:
-        raise ValueError("No liked movies found in movie index.")
+        return None  # No liked movies found
 
     liked_vectors = movie_matrix[matched_rows].toarray()
-
-    print(f"\nBuilding user vector from {len(matched_rows)} movies...")
-    print(f"Each movie vector has {liked_vectors.shape[1]} features")
-
     user_vector = liked_vectors.mean(axis=0)
-
-    print(f"User vector shape : {user_vector.shape}")
-    print(f"Non-zero features : {np.count_nonzero(user_vector)}")
-
     return user_vector
 
+def build_user_matrix(ratings_path, movie_matrix, movie_index, rating_threshold=4.0):
+    """Build matrix of all users: rows = users, columns = movie features."""
+    ratings = pd.read_csv(ratings_path)
+    user_ids = sorted(ratings["userId"].unique())
+    num_features = movie_matrix.shape[1]
+    user_id_to_row = {uid: i for i, uid in enumerate(user_ids)}
+    user_matrix = np.zeros((len(user_ids), num_features), dtype=np.float32)
 
-def save_user_vector(user_vector: np.ndarray, processed_dir: str, user_id: int):
+    for uid in user_ids:
+        liked_ids = ratings[(ratings["userId"] == uid) & (ratings["rating"] >= rating_threshold)]["movieId"].tolist()
+        user_vec = build_user_vector(liked_ids, movie_matrix, movie_index)
+        if user_vec is not None:
+            user_matrix[user_id_to_row[uid]] = user_vec
+
+    print(f"Built user matrix: {user_matrix.shape} (users × features)")
+    return user_matrix, user_id_to_row
+
+def save_user_matrix(user_matrix, user_id_to_row, processed_dir):
     os.makedirs(processed_dir, exist_ok=True)
-    path = os.path.join(processed_dir, f"user_vector_{user_id}.npy")
+    matrix_path = os.path.join(processed_dir, "user_matrix.npy")
+    mapping_path = os.path.join(processed_dir, "user_id_to_row.json")
 
-    np.save(path, user_vector)
+    np.save(matrix_path, user_matrix)
 
-    print(f"\nSaved user vector → {path}")
-    return path
+    # Convert keys to int for JSON
+    user_id_to_row_clean = {int(k): v for k, v in user_id_to_row.items()}
 
+    with open(mapping_path, "w") as f:
+        json.dump(user_id_to_row_clean, f)
 
-def describe_user_taste(user_vector: np.ndarray, vectorizer, top_n: int = 10):
-    feature_names = vectorizer.get_feature_names_out()
-    top_idx = user_vector.argsort()[::-1][:top_n]
-
-    print(f"\n── Top-{top_n} taste keywords ──")
-
-    for rank, i in enumerate(top_idx, 1):
-        if user_vector[i] > 0:
-            print(f"{rank:2d}. '{feature_names[i]}' → {user_vector[i]:.4f}")
-
+    print(f"Saved user matrix → {matrix_path}")
+    print(f"Saved user ID mapping → {mapping_path}")
+    return matrix_path, mapping_path
 
 # ─────────────────────────────────────────────
-# Main
+# Run script
 # ─────────────────────────────────────────────
-
-def main(user_id: int = 1, rating_threshold: float = 4.0):
-    print("=" * 60)
-    print("  USER VECTOR — Sak's Task")
-    print("=" * 60)
-
+if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(base_dir)
-
     processed_dir = os.path.join(project_root, "data", "processed")
-    ratings_path  = os.path.join(project_root, "data", "raw", "ratings.csv")
+    ratings_path  = os.path.join(project_root, "data", "cleaned", "ratings_clean.csv")
 
-    print(f"\nProject root : {project_root}")
-    print(f"Processed dir: {processed_dir}")
-
-    # 1. Load artifacts
     movie_matrix, movie_index, vectorizer = load_artifacts(processed_dir)
-
-    # 2. Get liked movies
-    liked_ids = get_liked_movies(ratings_path, user_id, rating_threshold)
-
-    if not liked_ids:
-        print("No liked movies found. Exiting.")
-        return
-
-    # 3. Build vector
-    user_vector = build_user_vector(liked_ids, movie_matrix, movie_index)
-
-    # 4. Describe taste
-    describe_user_taste(user_vector, vectorizer)
-
-    # 5. Save
-    save_user_vector(user_vector, processed_dir, user_id)
-
-    print("\n✓ User Vector complete!")
-
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--user_id", type=int, default=1)
-    parser.add_argument("--threshold", type=float, default=4.0)
-
-    args = parser.parse_args()
-
-    main(user_id=args.user_id, rating_threshold=args.threshold)
+    user_matrix, user_id_to_row = build_user_matrix(ratings_path, movie_matrix, movie_index)
+    save_user_matrix(user_matrix, user_id_to_row, processed_dir)
