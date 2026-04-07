@@ -31,7 +31,6 @@ if __name__ == "__main__":
     print("  STEP 3: User Vector (Sak)")
     print("=" * 60)
     run_user_vector(
-        user_id=USER_ID,
         rating_threshold=RATING_THRESHOLD
     )
 

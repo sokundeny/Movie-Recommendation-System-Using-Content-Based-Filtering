@@ -75,15 +75,29 @@ def save_user_matrix(user_matrix, user_id_to_row, processed_dir):
     print(f"Saved user ID mapping → {mapping_path}")
     return matrix_path, mapping_path
 
-# ─────────────────────────────────────────────
-# Run script
-# ─────────────────────────────────────────────
-if __name__ == "__main__":
+def main(user_id=None, rating_threshold=4.0):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(base_dir)
     processed_dir = os.path.join(project_root, "data", "processed")
     ratings_path  = os.path.join(project_root, "data", "cleaned", "ratings_clean.csv")
 
     movie_matrix, movie_index, vectorizer = load_artifacts(processed_dir)
-    user_matrix, user_id_to_row = build_user_matrix(ratings_path, movie_matrix, movie_index)
-    save_user_matrix(user_matrix, user_id_to_row, processed_dir)
+
+    if user_id is not None:
+        # Build a single user's vector
+        ratings = pd.read_csv(ratings_path)
+        liked_ids = ratings[(ratings["userId"] == user_id) & (ratings["rating"] >= rating_threshold)]["movieId"].tolist()
+        user_vector = build_user_vector(liked_ids, movie_matrix, movie_index)
+        print(f"Built vector for user {user_id}: {user_vector.shape if user_vector is not None else None}")
+        return user_vector
+    else:
+        # Build matrix for all users
+        user_matrix, user_id_to_row = build_user_matrix(ratings_path, movie_matrix, movie_index, rating_threshold)
+        save_user_matrix(user_matrix, user_id_to_row, processed_dir)
+        return user_matrix
+
+# ─────────────────────────────────────────────
+# Run script
+# ─────────────────────────────────────────────
+if __name__ == "__main__":
+    main()

@@ -10,3 +10,42 @@ The main objectives of this project are:
 4. Implement a Content-Based Filtering system to recommend movies based on
 similarity
 5. Visualize top-rated movies and recommendations
+
+---
+
+## Dataset From MovieLens
+
+### Before can run we should
+1. Download DataSet
+2. Clean data.
+3. Process Data.
+
+## Backend Setup (FastAPI)
+
+### Requirements
+
+- Python 3.9+
+- pip packages:
+
+```bash
+pip install fastapi uvicorn pandas numpy scipy requests scikit-learn python-multipart
+```
+Run
+
+```
+uvicorn backend.app:app --reload
+```
+
+## Frontend Setup (Vue)
+
+### Requirements
+
+
+```bash
+npm install
+```
+Run
+
+```
+npm run dev
+```

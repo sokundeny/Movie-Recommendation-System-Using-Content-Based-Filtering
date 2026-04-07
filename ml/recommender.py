@@ -193,8 +193,6 @@ def main(user_id: int = 4, top_n: int = 10, exclude_seen: bool = True):
         exclude_seen  = exclude_seen,
     )
 
-    # Step 4 – Display
-    print_recommendations(recommendations, user_id)
 
     print("\n Recommendation step complete!")
 
