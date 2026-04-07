@@ -8,9 +8,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ml.feature_engineering import main as run_feature_engineering
 from ml.movie_vectorizer    import main as run_movie_vectorizer
 from ml.user_vectorizer     import main as run_user_vector
+from ml.recommender         import main as run_recommender
 
 USER_ID          = 1      # Change to any userId in ratings.csv
 RATING_THRESHOLD = 4.0    # Minimum rating to consider "liked"
+TOP_N            = 10     # Number of movies to recommend
 
 if __name__ == "__main__":
     print("=" * 60)
@@ -34,4 +36,14 @@ if __name__ == "__main__":
     )
 
     print()
-    print("✓ Pipeline (Step 1 → 3) complete!")
+    print("=" * 60)
+    print("  STEP 4: Comparison for Recommendation (Theara)")
+    print("=" * 60)
+    run_recommender(
+        user_id=USER_ID,
+        top_n=TOP_N,
+        exclude_seen=True,
+    )
+
+    print()
+    print("✓ Pipeline (Step 1 → 4) complete!")
