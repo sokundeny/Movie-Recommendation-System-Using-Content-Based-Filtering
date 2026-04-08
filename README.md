@@ -40,6 +40,12 @@ uvicorn backend.app:app --reload
 
 ### Requirements
 
+change directory to frontend
+
+```bash
+cd frontend
+```
+
 
 ```bash
 npm install
